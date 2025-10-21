@@ -1,0 +1,18 @@
+# Dependencies
+web/node_modules/
+
+# Next.js build output
+web/.next/
+web/out/
+
+# Environment files
+web/.env
+web/.env.local
+web/.env.*
+
+# Prisma local database
+web/prisma/dev.db
+
+# Logs
+*.log
+npm-debug.log*

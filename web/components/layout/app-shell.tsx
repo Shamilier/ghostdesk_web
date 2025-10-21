@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { Button } from "@/components/ui/button";
 import { CommandMenu } from "@/components/layout/command-menu";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -8,7 +9,20 @@ import { UploadDialog } from "@/components/panels/upload-dialog";
 import { cn } from "@/lib/utils";
 import { Bell, Menu, Search, UploadCloud } from "lucide-react";
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+type AppShellUser = {
+  id: string;
+  name: string;
+  email: string;
+  timezone: string | null;
+};
+
+export default function AppShell({
+  children,
+  user,
+}: {
+  children: ReactNode;
+  user: AppShellUser;
+}) {
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
@@ -35,7 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <kbd className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/50">⌘K</kbd>
               </button>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
                 className="hidden items-center gap-2 text-sm text-white/80 lg:inline-flex"
@@ -50,6 +64,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Bell className="h-5 w-5" />
                 <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent"></span>
               </button>
+              <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 lg:hidden">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-sm text-accent">
+                  {user.name.slice(0, 1).toUpperCase()}
+                </div>
+                <span className="font-medium text-white/80">{user.name}</span>
+                <LogoutButton />
+              </div>
+              <div className="hidden items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 lg:flex">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-accent">
+                  {user.name.slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">{user.name}</p>
+                  <p className="text-xs text-white/60">{user.email}</p>
+                </div>
+                <LogoutButton />
+              </div>
             </div>
           </div>
         </header>
