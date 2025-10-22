@@ -1,60 +1,31 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useFormState } from "react-dom";
 
+import { loginAction, INITIAL_LOGIN_STATE, type LoginFormState } from "@/app/(auth)/login/actions";
+import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
 export function LoginForm() {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: "Не удалось войти" }));
-        setError(data.error ?? "Не удалось войти");
-        return;
-      }
-
-      router.replace("/dashboard");
-      router.refresh();
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [state, formAction] = useFormState<LoginFormState, FormData>(loginAction, INITIAL_LOGIN_STATE);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form action={formAction} className="space-y-6">
       <div className="space-y-2">
         <label className="text-sm text-white/70" htmlFor="email">
           Email
         </label>
         <Input
           id="email"
+          name="email"
           type="email"
           placeholder="you@example.com"
           autoComplete="email"
           required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          defaultValue={state.values.email}
         />
+        {state.fieldErrors.email ? (
+          <p className="text-sm text-red-300">{state.fieldErrors.email.join(". ")}</p>
+        ) : null}
       </div>
       <div className="space-y-2">
         <label className="text-sm text-white/70" htmlFor="password">
@@ -62,22 +33,18 @@ export function LoginForm() {
         </label>
         <Input
           id="password"
+          name="password"
           type="password"
           placeholder="••••••••"
           autoComplete="current-password"
           required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
         />
+        {state.fieldErrors.password ? (
+          <p className="text-sm text-red-300">{state.fieldErrors.password.join(". ")}</p>
+        ) : null}
       </div>
-      {error ? <p className="text-sm text-red-300">{error}</p> : null}
-      <button
-        type="submit"
-        className="w-full rounded-full bg-accent px-4 py-3 text-sm font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-        disabled={isLoading}
-      >
-        {isLoading ? "Входим..." : "Войти"}
-      </button>
+      {state.error ? <p className="text-sm text-red-300">{state.error}</p> : null}
+      <FormSubmitButton idleLabel="Войти" pendingLabel="Входим..." />
       <p className="text-center text-sm text-white/60">
         Нет аккаунта?{" "}
         <Link href="/register" className="text-accent hover:text-white">
