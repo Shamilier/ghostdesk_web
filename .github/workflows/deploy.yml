@@ -52,7 +52,7 @@ jobs:
 
             # Обновляем код до origin/main
             git fetch --all
-            ggit fetch origin --prune
+            git fetch origin --prune
 
 
             # Определяем режим
