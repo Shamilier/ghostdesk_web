@@ -2,13 +2,22 @@
 import Link from "next/link";
 import { useFormState } from "react-dom";
 
-import { registerAction, INITIAL_REGISTER_STATE, type RegisterFormState } from "@/app/(auth)/register/actions";
+import { registerAction, type RegisterFormState } from "@/app/(auth)/register/actions";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
 type FieldName = "name" | "email" | "password";
 
 type ErrorRecord = Record<FieldName, string[]>;
+
+const INITIAL_REGISTER_STATE: RegisterFormState = {
+  error: null,
+  fieldErrors: {},
+  values: {
+    name: "",
+    email: "",
+  },
+};
 
 function getFieldErrors(fieldErrors: Record<string, string[]>, field: FieldName) {
   const value = fieldErrors[field];
@@ -18,6 +27,7 @@ function getFieldErrors(fieldErrors: Record<string, string[]>, field: FieldName)
 export function RegisterForm() {
   const [state, formAction] = useFormState<RegisterFormState, FormData>(registerAction, INITIAL_REGISTER_STATE);
   const fieldErrors = state.fieldErrors as ErrorRecord;
+  const values = state.values ?? { name: "", email: "" };
 
   return (
     <form action={formAction} className="space-y-6">
@@ -30,7 +40,7 @@ export function RegisterForm() {
           name="name"
           placeholder="Алексей Петров"
           required
-          defaultValue={state.values.name}
+          defaultValue={values.name}
         />
         {getFieldErrors(fieldErrors, "name").length ? (
           <p className="text-sm text-red-300">{getFieldErrors(fieldErrors, "name").join(". ")}</p>
@@ -47,7 +57,7 @@ export function RegisterForm() {
           placeholder="you@example.com"
           autoComplete="email"
           required
-          defaultValue={state.values.email}
+          defaultValue={values.email}
         />
         {getFieldErrors(fieldErrors, "email").length ? (
           <p className="text-sm text-red-300">{getFieldErrors(fieldErrors, "email").join(". ")}</p>

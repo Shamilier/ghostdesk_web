@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
+import { getApiBaseUrl } from "@/lib/env";
 import { TOKEN_COOKIE_NAME } from "@/lib/session";
 
 type RegisterFormState = {
@@ -21,25 +22,6 @@ const registerSchema = z.object({
   email: z.string().email({ message: "Введите корректный email" }),
   password: z.string().min(8, { message: "Минимальная длина пароля — 8 символов" }),
 });
-
-const INITIAL_REGISTER_STATE: RegisterFormState = {
-  error: null,
-  fieldErrors: {},
-  values: {
-    name: "",
-    email: "",
-  },
-};
-
-function getApiBaseUrl() {
-  const url = process.env.NEXT_PUBLIC_API_URL;
-
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured");
-  }
-
-  return url.replace(/\/$/, "");
-}
 
 function extractToken(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
@@ -84,7 +66,7 @@ function mapErrors(payload: unknown) {
 export async function registerAction(
   _prevState: RegisterFormState,
   formData: FormData,
-): Promise<RegisterFormState | void> {
+): Promise<RegisterFormState> {
   const fields = {
     name: String(formData.get("name") ?? ""),
     email: String(formData.get("email") ?? ""),
@@ -106,6 +88,17 @@ export async function registerAction(
   }
 
   const apiUrl = getApiBaseUrl();
+
+  if (!apiUrl) {
+    return {
+      error: "Сервис недоступен: не настроен API URL",
+      fieldErrors: {},
+      values: {
+        name: fields.name,
+        email: fields.email,
+      },
+    };
+  }
 
   try {
     const response = await fetch(`${apiUrl}/auth/register`, {
@@ -158,8 +151,14 @@ export async function registerAction(
     };
   }
 
-  return INITIAL_REGISTER_STATE;
+  return {
+    error: null,
+    fieldErrors: {},
+    values: {
+      name: "",
+      email: "",
+    },
+  };
 }
 
-export { INITIAL_REGISTER_STATE };
 export type { RegisterFormState };
