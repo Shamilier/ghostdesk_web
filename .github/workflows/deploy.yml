@@ -1,0 +1,86 @@
+name: Deploy Web to VPS
+
+on:
+  push:
+    branches: [ "main" ]
+  # если хочешь деплой после merge PR, а не каждого push:
+  # pull_request:
+  #   types: [closed]
+  #   branches: [ "main" ]
+
+jobs:
+  deploy:
+    # если включишь блок pull_request выше — эта строка деплоит только если PR смёржен
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (нужно, чтобы достать текст коммита)
+        uses: actions/checkout@v4
+
+      - name: Get commit message
+        id: msg
+        run: |
+          # для push
+          MSG="${{ github.event.head_commit.message }}"
+          # для merge PR (если триггер pull_request/closed)
+          if [ -z "$MSG" ]; then
+            MSG="${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}"
+          fi
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          echo "$MSG" | tr '[:upper:]' '[:lower:]' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Deploy via SSH (build on server)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          envs: COMMIT_MESSAGE
+          script: |
+            set -euo pipefail
+
+            COMMIT_MESSAGE='${{ steps.msg.outputs.message }}'
+            APP_DIR="/home/web/ghostdesk_web/web"
+
+            echo "Commit message: $COMMIT_MESSAGE"
+
+            cd "$APP_DIR"
+
+            # Обновляем код до origin/main
+            git fetch --all
+            git reset --hard origin/main
+
+            # Определяем режим
+            MODE="normal"
+            if echo "$COMMIT_MESSAGE" | grep -q "чистим-всё"; then
+              MODE="clean_all"
+            elif echo "$COMMIT_MESSAGE" | grep -q "чистим"; then
+              MODE="clean_data"
+            fi
+            echo "Deploy mode: $MODE"
+
+            # Зависимости и Prisma client
+            npm ci
+            npx prisma generate
+
+            # Очистка по режиму (SQLite)
+            if [ "$MODE" = "clean_data" ]; then
+              echo "Reset DB (drop & reapply migrations)"
+              npx prisma migrate reset --force --skip-generate --skip-seed
+            elif [ "$MODE" = "clean_all" ]; then
+              echo "Wipe migrations + dev.db and create new init migration"
+              rm -rf prisma/migrations prisma/dev.db || true
+              npx prisma migrate dev --name init
+            fi
+
+            # Применяем миграции (на всякий случай)
+            npx prisma migrate deploy
+
+            # Сборка и zero-downtime рестарт
+            npm run build
+            pm2 reload ghostdesk-web || pm2 start npm --name ghostdesk-web -- start -- --hostname 0.0.0.0 --port 3000
+
+            echo "✅ Deployed ($(date -Is)) — mode=$MODE"
