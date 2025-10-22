@@ -2,7 +2,7 @@ name: Deploy Web to VPS
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "codex2" ]
   # если хочешь деплой после merge PR, а не каждого push:
   # pull_request:
   #   types: [closed]
