@@ -1,5 +1,5 @@
+"use client";
 import Link from "next/link";
-use client
 import { useFormState } from "react-dom";
 import { loginAction, INITIAL_LOGIN_STATE, type LoginFormState } from "@/app/(auth)/login/actions";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
