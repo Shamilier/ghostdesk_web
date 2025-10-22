@@ -29,6 +29,15 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Write .env.production for build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        run: |
+          cat > .env.production <<EOF
+          NODE_ENV=production
+          NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+          EOF
+
       - name: Build
         run: npm run build
 
