@@ -98,7 +98,6 @@ export async function registerAction(
       values: {
         name: fields.name,
         email: fields.email,
-        password: "",
       },
     };
   }
@@ -162,7 +161,6 @@ export async function registerAction(
     values: {
       name: "",
       email: "",
-      password: "",
     },
   };
 }
