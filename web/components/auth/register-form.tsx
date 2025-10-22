@@ -1,70 +1,38 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useFormState } from "react-dom";
 
+import { registerAction, INITIAL_REGISTER_STATE, type RegisterFormState } from "@/app/(auth)/register/actions";
+import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
-type FieldErrors = Record<string, string[]>;
+type FieldName = "name" | "email" | "password";
+
+type ErrorRecord = Record<FieldName, string[]>;
+
+function getFieldErrors(fieldErrors: Record<string, string[]>, field: FieldName) {
+  const value = fieldErrors[field];
+  return Array.isArray(value) ? value : [];
+}
 
 export function RegisterForm() {
-  const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setFieldErrors({});
-
-    try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: "Не удалось зарегистрироваться" }));
-        if (data.errors) {
-          setFieldErrors(data.errors as FieldErrors);
-          setError("Проверьте введённые данные");
-        } else {
-          setError(data.error ?? "Не удалось зарегистрироваться");
-        }
-        return;
-      }
-
-      router.replace("/dashboard");
-      router.refresh();
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const [state, formAction] = useFormState<RegisterFormState, FormData>(registerAction, INITIAL_REGISTER_STATE);
+  const fieldErrors = state.fieldErrors as ErrorRecord;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form action={formAction} className="space-y-6">
       <div className="space-y-2">
         <label className="text-sm text-white/70" htmlFor="name">
           Имя
         </label>
         <Input
           id="name"
+          name="name"
           placeholder="Алексей Петров"
           required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+          defaultValue={state.values.name}
         />
-        {fieldErrors.name ? (
-          <p className="text-sm text-red-300">{fieldErrors.name.join(". ")}</p>
+        {getFieldErrors(fieldErrors, "name").length ? (
+          <p className="text-sm text-red-300">{getFieldErrors(fieldErrors, "name").join(". ")}</p>
         ) : null}
       </div>
       <div className="space-y-2">
@@ -73,15 +41,15 @@ export function RegisterForm() {
         </label>
         <Input
           id="email"
+          name="email"
           type="email"
           placeholder="you@example.com"
           autoComplete="email"
           required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          defaultValue={state.values.email}
         />
-        {fieldErrors.email ? (
-          <p className="text-sm text-red-300">{fieldErrors.email.join(". ")}</p>
+        {getFieldErrors(fieldErrors, "email").length ? (
+          <p className="text-sm text-red-300">{getFieldErrors(fieldErrors, "email").join(". ")}</p>
         ) : null}
       </div>
       <div className="space-y-2">
@@ -90,25 +58,18 @@ export function RegisterForm() {
         </label>
         <Input
           id="password"
+          name="password"
           type="password"
           placeholder="Минимум 8 символов"
           autoComplete="new-password"
           required
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
         />
-        {fieldErrors.password ? (
-          <p className="text-sm text-red-300">{fieldErrors.password.join(". ")}</p>
+        {getFieldErrors(fieldErrors, "password").length ? (
+          <p className="text-sm text-red-300">{getFieldErrors(fieldErrors, "password").join(". ")}</p>
         ) : null}
       </div>
-      {error ? <p className="text-sm text-red-300">{error}</p> : null}
-      <button
-        type="submit"
-        className="w-full rounded-full bg-accent px-4 py-3 text-sm font-semibold text-black transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
-        disabled={isLoading}
-      >
-        {isLoading ? "Создаём аккаунт..." : "Создать аккаунт"}
-      </button>
+      {state.error ? <p className="text-sm text-red-300">{state.error}</p> : null}
+      <FormSubmitButton idleLabel="Создать аккаунт" pendingLabel="Создаём аккаунт..." />
       <p className="text-center text-sm text-white/60">
         Уже есть аккаунт?{" "}
         <Link href="/login" className="text-accent hover:text-white">

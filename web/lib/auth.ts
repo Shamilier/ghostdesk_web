@@ -1,12 +1,20 @@
-import { cookies } from "next/headers";
-import bcrypt from "bcryptjs";
-import { randomUUID } from "crypto";
-import { addDays } from "date-fns";
+import "server-only";
 
-import { prisma } from "@/lib/prisma";
+import { cache } from "react";
 
-export const SESSION_COOKIE_NAME = "ghostdesk_session";
-const SESSION_LIFETIME_DAYS = 30;
+import { getSession } from "@/lib/session";
+
+type ApiUser = {
+  id?: string | number;
+  email?: string;
+  name?: string;
+  apiKey?: string;
+  api_key?: string;
+  createdAt?: string;
+  created_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+};
 
 export type AuthUser = {
   id: string;
@@ -17,83 +25,109 @@ export type AuthUser = {
   updatedAt: string;
 };
 
-export async function hashPassword(password: string) {
-  const saltRounds = 12;
-  return bcrypt.hash(password, saltRounds);
+const DEFAULT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
+function getApiBaseUrl() {
+  const url = process.env.NEXT_PUBLIC_API_URL;
+
+  if (!url) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured");
+  }
+
+  return url.replace(/\/$/, "");
 }
 
-export async function verifyPassword(password: string, hash: string) {
-  return bcrypt.compare(password, hash);
-}
+type FetchOptions = Omit<RequestInit, "headers"> & {
+  headers?: Record<string, string>;
+};
 
-export async function createSession(userId: string) {
-  const token = randomUUID();
-  const expiresAt = addDays(new Date(), SESSION_LIFETIME_DAYS);
+async function fetchFromApi(path: string, options: FetchOptions = {}) {
+  const token = getSession();
 
-  await prisma.session.create({
-    data: {
-      token,
-      userId,
-      expiresAt,
+  if (!token) {
+    return null;
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers ?? {}),
     },
+    cache: "no-store",
   });
 
-  return { token, expiresAt };
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      return null;
+    }
+
+    throw new Error(`Failed to fetch ${path}: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
-export async function deleteSession(token: string) {
-  await prisma.session.delete({ where: { token } }).catch(() => {
-    // Сессия могла быть удалена ранее
-  });
-}
-
-export function setSessionCookie(token: string, expiresAt: Date) {
-  const cookieStore = cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    expires: expiresAt,
-    path: "/",
-  });
-}
-
-export function clearSessionCookie() {
-  const cookieStore = cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
-}
-
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  const cookieStore = cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionToken) {
+function normalizeUser(data: unknown): AuthUser | null {
+  if (!data || typeof data !== "object") {
     return null;
   }
 
-  const session = await prisma.session.findUnique({
-    where: { token: sessionToken },
-    include: { user: true },
-  });
+  const payload = data as { user?: ApiUser } & ApiUser;
+  const user = payload.user ?? payload;
 
-  if (!session) {
-    clearSessionCookie();
+  if (!user || typeof user !== "object") {
     return null;
   }
 
-  if (session.expiresAt < new Date()) {
-    await prisma.session.delete({ where: { token: sessionToken } }).catch(() => undefined);
-    clearSessionCookie();
+  const { id, email, name } = user;
+
+  if (!id || !email || !name) {
     return null;
   }
 
-  const { user } = session;
+  const createdAt = "createdAt" in user && user.createdAt
+    ? user.createdAt
+    : "created_at" in user && user.created_at
+      ? user.created_at
+      : new Date().toISOString();
+
+  const updatedAt = "updatedAt" in user && user.updatedAt
+    ? user.updatedAt
+    : "updated_at" in user && user.updated_at
+      ? user.updated_at
+      : createdAt;
+
+  const apiKey =
+    ("apiKey" in user && typeof user.apiKey === "string" && user.apiKey) ||
+    ("api_key" in user && typeof user.api_key === "string" && user.api_key) ||
+    "";
+
   return {
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    apiKey: user.apiKey,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
+    id: String(id),
+    email: String(email),
+    name: String(name),
+    apiKey,
+    createdAt,
+    updatedAt,
   };
 }
+
+export const getCurrentUser = cache(async () => {
+  try {
+    const data = await fetchFromApi("/auth/me");
+
+    if (!data) {
+      return null;
+    }
+
+    return normalizeUser(data);
+  } catch (error) {
+    console.error("Failed to get current user", error);
+    return null;
+  }
+});
+
+export const SESSION_MAX_AGE_SECONDS = DEFAULT_MAX_AGE_SECONDS;
