@@ -161,5 +161,4 @@ export async function registerAction(
   return INITIAL_REGISTER_STATE;
 }
 
-export { INITIAL_REGISTER_STATE };
 export type { RegisterFormState };

@@ -165,5 +165,4 @@ export async function loginAction(
   return INITIAL_LOGIN_STATE;
 }
 
-export { INITIAL_LOGIN_STATE };
 export type { LoginFormState };
