@@ -14,6 +14,7 @@ type RegisterFormState = {
   values: {
     name: string;
     email: string;
+    password: string;
   };
 };
 
@@ -83,6 +84,7 @@ export async function registerAction(
       values: {
         name: fields.name,
         email: fields.email,
+        password: "",
       },
     };
   }
@@ -120,6 +122,7 @@ export async function registerAction(
         values: {
           name: parsed.data.name,
           email: parsed.data.email,
+          password: "",
         },
       };
     }
@@ -147,6 +150,7 @@ export async function registerAction(
       values: {
         name: parsed.data.name,
         email: parsed.data.email,
+        password: "",
       },
     };
   }

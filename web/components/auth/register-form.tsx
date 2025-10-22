@@ -74,6 +74,7 @@ export function RegisterForm() {
           placeholder="Минимум 8 символов"
           autoComplete="new-password"
           required
+          defaultValue={values.password}
         />
         {getFieldErrors(fieldErrors, "password").length ? (
           <p className="text-sm text-red-300">{getFieldErrors(fieldErrors, "password").join(". ")}</p>
