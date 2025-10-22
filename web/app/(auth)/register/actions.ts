@@ -84,7 +84,7 @@ function mapErrors(payload: unknown) {
 export async function registerAction(
   _prevState: RegisterFormState,
   formData: FormData,
-): Promise<RegisterFormState | void> {
+): Promise<RegisterFormState> {
   const fields = {
     name: String(formData.get("name") ?? ""),
     email: String(formData.get("email") ?? ""),
