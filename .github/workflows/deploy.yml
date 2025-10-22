@@ -52,7 +52,7 @@ jobs:
 
             # Обновляем код до origin/main
             git fetch --all
-            git reset --hard origin/main
+            git reset --hard origin/codex2
 
             # Определяем режим
             MODE="normal"
