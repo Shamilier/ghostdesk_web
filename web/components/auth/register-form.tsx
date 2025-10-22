@@ -2,13 +2,22 @@
 import Link from "next/link";
 import { useFormState } from "react-dom";
 
-import { registerAction, INITIAL_REGISTER_STATE, type RegisterFormState } from "@/app/(auth)/register/actions";
+import { registerAction, type RegisterFormState } from "@/app/(auth)/register/actions";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
 type FieldName = "name" | "email" | "password";
 
 type ErrorRecord = Record<FieldName, string[]>;
+
+const INITIAL_REGISTER_STATE: RegisterFormState = {
+  error: null,
+  fieldErrors: {},
+  values: {
+    name: "",
+    email: "",
+  },
+};
 
 function getFieldErrors(fieldErrors: Record<string, string[]>, field: FieldName) {
   const value = fieldErrors[field];

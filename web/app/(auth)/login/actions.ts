@@ -86,7 +86,7 @@ function mapErrorMessage(payload: unknown, fallback: string) {
 export async function loginAction(
   _prevState: LoginFormState,
   formData: FormData,
-): Promise<LoginFormState | void> {
+): Promise<LoginFormState> {
   const fields = {
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
@@ -165,5 +165,4 @@ export async function loginAction(
   return INITIAL_LOGIN_STATE;
 }
 
-export { INITIAL_LOGIN_STATE };
 export type { LoginFormState };
