@@ -33,6 +33,7 @@ export function LoginForm() {
         return;
       }
 
+      router.replace("/dashboard");
       router.refresh();
     } finally {
       setIsLoading(false);
@@ -79,7 +80,7 @@ export function LoginForm() {
       </button>
       <p className="text-center text-sm text-white/60">
         Нет аккаунта?{" "}
-        <Link href="/auth/register" className="text-accent hover:text-white">
+        <Link href="/register" className="text-accent hover:text-white">
           Зарегистрироваться
         </Link>
       </p>

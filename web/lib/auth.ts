@@ -12,6 +12,7 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string;
+  apiKey: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -91,6 +92,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     id: user.id,
     email: user.email,
     name: user.name,
+    apiKey: user.apiKey,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
