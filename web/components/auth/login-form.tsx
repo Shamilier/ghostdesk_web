@@ -1,14 +1,12 @@
 "use client";
-
 import Link from "next/link";
 import { useFormState } from "react-dom";
-
-import { loginAction, INITIAL_LOGIN_STATE } from "@/app/(auth)/login/actions";
+import { loginAction, INITIAL_LOGIN_STATE, type LoginFormState } from "@/app/(auth)/login/actions";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
 export function LoginForm() {
-  const [state, formAction] = useFormState(loginAction, INITIAL_LOGIN_STATE);
+  const [state, formAction] = useFormState<LoginFormState, FormData>(loginAction, INITIAL_LOGIN_STATE);
 
   return (
     <form action={formAction} className="space-y-6">

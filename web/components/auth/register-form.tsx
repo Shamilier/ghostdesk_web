@@ -1,9 +1,8 @@
 "use client";
-
 import Link from "next/link";
 import { useFormState } from "react-dom";
 
-import { registerAction, INITIAL_REGISTER_STATE } from "@/app/(auth)/register/actions";
+import { registerAction, INITIAL_REGISTER_STATE, type RegisterFormState } from "@/app/(auth)/register/actions";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
@@ -17,7 +16,7 @@ function getFieldErrors(fieldErrors: Record<string, string[]>, field: FieldName)
 }
 
 export function RegisterForm() {
-  const [state, formAction] = useFormState(registerAction, INITIAL_REGISTER_STATE);
+  const [state, formAction] = useFormState<RegisterFormState, FormData>(registerAction, INITIAL_REGISTER_STATE);
   const fieldErrors = state.fieldErrors as ErrorRecord;
 
   return (
