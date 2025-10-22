@@ -8,7 +8,6 @@ import { SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
 import { TOKEN_COOKIE_NAME } from "@/lib/session";
 
 type RegisterFormState = {
-  ok: boolean;
   error: string | null;
   fieldErrors: Record<string, string[]>;
   values: {
@@ -24,7 +23,6 @@ const registerSchema = z.object({
 });
 
 const INITIAL_REGISTER_STATE: RegisterFormState = {
-  ok: false,
   error: null,
   fieldErrors: {},
   values: {
@@ -86,7 +84,7 @@ function mapErrors(payload: unknown) {
 export async function registerAction(
   _prevState: RegisterFormState,
   formData: FormData,
-): Promise<RegisterFormState> {
+): Promise<RegisterFormState | void> {
   const fields = {
     name: String(formData.get("name") ?? ""),
     email: String(formData.get("email") ?? ""),
@@ -98,7 +96,6 @@ export async function registerAction(
   if (!parsed.success) {
     const { fieldErrors } = parsed.error.flatten();
     return {
-      ok: false,
       error: "Проверьте введённые данные",
       fieldErrors,
       values: {
@@ -125,7 +122,6 @@ export async function registerAction(
       const errorPayload = await response.json().catch(() => null);
       const { error, fieldErrors } = mapErrors(errorPayload);
       return {
-        ok: false,
         error,
         fieldErrors,
         values: {
@@ -147,31 +143,12 @@ export async function registerAction(
         maxAge: SESSION_MAX_AGE_SECONDS,
       });
       redirect("/dashboard");
-      return {
-        ok: true,
-        error: null,
-        fieldErrors: {},
-        values: {
-          name: "",
-          email: "",
-        },
-      };
     }
 
     redirect("/login");
-    return {
-      ok: true,
-      error: null,
-      fieldErrors: {},
-      values: {
-        name: "",
-        email: "",
-      },
-    };
   } catch (error) {
     console.error("registerAction failed", error);
     return {
-      ok: false,
       error: "Не удалось подключиться к сервису авторизации",
       fieldErrors: {},
       values: {

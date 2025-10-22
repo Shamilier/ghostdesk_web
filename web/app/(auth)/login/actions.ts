@@ -8,7 +8,6 @@ import { SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
 import { TOKEN_COOKIE_NAME } from "@/lib/session";
 
 type LoginFormState = {
-  ok: boolean;
   error: string | null;
   fieldErrors: Partial<Record<"email" | "password", string[]>>;
   values: {
@@ -22,7 +21,6 @@ const loginSchema = z.object({
 });
 
 const INITIAL_LOGIN_STATE: LoginFormState = {
-  ok: false,
   error: null,
   fieldErrors: {},
   values: {
@@ -88,7 +86,7 @@ function mapErrorMessage(payload: unknown, fallback: string) {
 export async function loginAction(
   _prevState: LoginFormState,
   formData: FormData,
-): Promise<LoginFormState> {
+): Promise<LoginFormState | void> {
   const fields = {
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
@@ -99,7 +97,6 @@ export async function loginAction(
   if (!parsed.success) {
     const { fieldErrors } = parsed.error.flatten();
     return {
-      ok: false,
       error: "Проверьте введённые данные",
       fieldErrors,
       values: {
@@ -124,7 +121,6 @@ export async function loginAction(
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => null);
       return {
-        ok: false,
         error: mapErrorMessage(errorPayload, "Не удалось войти"),
         fieldErrors: {},
         values: {
@@ -138,7 +134,6 @@ export async function loginAction(
 
     if (!token) {
       return {
-        ok: false,
         error: "Сервис авторизации не вернул токен",
         fieldErrors: {},
         values: {
@@ -156,18 +151,9 @@ export async function loginAction(
     });
 
     redirect("/dashboard");
-    return {
-      ok: true,
-      error: null,
-      fieldErrors: {},
-      values: {
-        email: "",
-      },
-    };
   } catch (error) {
     console.error("loginAction failed", error);
     return {
-      ok: false,
       error: "Не удалось подключиться к сервису авторизации",
       fieldErrors: {},
       values: {
