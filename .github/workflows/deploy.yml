@@ -126,9 +126,14 @@ jobs:
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            echo "==> Write .env from secret"
-            echo 'DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}' > .env
-            grep DATABASE_URL .env
+            echo "==> Write .env (use secret or fallback to SQLite)"
+            DB_URL='${{ secrets.PROD_DATABASE_URL }}'
+            if [ -z "$DB_URL" ]; then
+              DB_URL='file:./prisma/dev.db'
+            fi
+            printf 'DATABASE_URL="%s"\n' "$DB_URL" > .env
+            cat .env
+
 
             echo "==> Stop app (SQLite миграции делаем на остановленном процессе)"
             pm2 stop "$PM2_APP" || true
