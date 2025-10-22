@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { createSession, hashPassword, setSessionCookie } from "@/lib/auth";
+import { generateApiKey } from "@/lib/api-key";
 
 const registerSchema = z.object({
   email: z.string().email({ message: "Введите корректный email" }),
@@ -35,12 +36,14 @@ export async function POST(req: Request) {
   }
 
   const passwordHash = await hashPassword(password);
+  const apiKey = generateApiKey();
 
   const user = await prisma.user.create({
     data: {
       email: normalizedEmail,
       name: name.trim(),
       passwordHash,
+      apiKey,
     },
   });
 

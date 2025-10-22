@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { createSession, setSessionCookie, verifyPassword } from "@/lib/auth";
+import { generateApiKey } from "@/lib/api-key";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Введите корректный email" }),
@@ -23,16 +24,26 @@ export async function POST(req: Request) {
   const { email, password } = parsed.data;
   const normalizedEmail = email.toLowerCase();
 
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user) {
+  if (!existingUser) {
     return NextResponse.json({ error: "Неверный email или пароль" }, { status: 401 });
   }
 
-  const isValid = await verifyPassword(password, user.passwordHash);
+  const isValid = await verifyPassword(password, existingUser.passwordHash);
 
   if (!isValid) {
     return NextResponse.json({ error: "Неверный email или пароль" }, { status: 401 });
+  }
+
+  let user = existingUser;
+
+  if (!user.apiKey) {
+    const apiKey = generateApiKey();
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { apiKey },
+    });
   }
 
   const session = await createSession(user.id);

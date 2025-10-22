@@ -1,7 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/auth/login-form";
-import { LogoutButton } from "@/components/auth/logout-button";
 import { getCurrentUser } from "@/lib/auth";
 
 export const metadata = {
@@ -12,21 +12,7 @@ export default async function LoginPage() {
   const user = await getCurrentUser();
 
   if (user) {
-    return (
-      <div className="space-y-8 text-center">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/50">GhostDesk</p>
-          <h1 className="text-2xl font-semibold text-white">Вы уже вошли</h1>
-          <p className="text-sm text-white/60">{user.email}</p>
-        </div>
-        <div className="flex flex-col gap-3">
-          <LogoutButton />
-          <Link href="/auth/register" className="text-sm text-white/60 underline-offset-4 hover:underline">
-            Создать другой аккаунт
-          </Link>
-        </div>
-      </div>
-    );
+    redirect("/dashboard");
   }
 
   return (
