@@ -1,4 +1,5 @@
 import Link from "next/link";
+use client
 import { useFormState } from "react-dom";
 
 import { registerAction, INITIAL_REGISTER_STATE, type RegisterFormState } from "@/app/(auth)/register/actions";
