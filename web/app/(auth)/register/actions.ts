@@ -8,6 +8,12 @@ import { SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
 import { getApiBaseUrl } from "@/lib/env";
 import { TOKEN_COOKIE_NAME } from "@/lib/session";
 
+type RegisterFormValues = {
+  name: string;
+  email: string;
+  password: string;
+};
+
 type RegisterFormState = {
   error: string | null;
   fieldErrors: Record<string, string[]>;
@@ -17,6 +23,21 @@ type RegisterFormState = {
     password: string;
   };
 };
+
+type BuildStateArgs = Partial<Omit<RegisterFormState, "values">> & {
+  values?: Partial<RegisterFormValues>;
+};
+
+function buildState(partial: BuildStateArgs = {}): RegisterFormState {
+  return {
+    error: partial.error ?? null,
+    fieldErrors: partial.fieldErrors ?? {},
+    values: {
+      ...EMPTY_VALUES,
+      ...(partial.values ?? {}),
+    },
+  };
+}
 
 const registerSchema = z.object({
   name: z.string().min(1, { message: "Имя обязательно" }).max(100),
@@ -49,7 +70,10 @@ function extractToken(payload: unknown): string | null {
 
 function mapErrors(payload: unknown) {
   if (!payload || typeof payload !== "object") {
-    return { error: "Не удалось зарегистрироваться", fieldErrors: {} as Record<string, string[]> };
+    return {
+      error: "Не удалось зарегистрироваться",
+      fieldErrors: {} as RegisterFormState["fieldErrors"],
+    };
   }
 
   const data = payload as {
@@ -59,7 +83,7 @@ function mapErrors(payload: unknown) {
   };
 
   const errorMessage = data.error ?? data.message ?? "Не удалось зарегистрироваться";
-  const fieldErrors = data.errors ?? {};
+  const fieldErrors = (data.errors ?? {}) as RegisterFormState["fieldErrors"];
 
   return { error: errorMessage, fieldErrors };
 }
@@ -78,15 +102,15 @@ export async function registerAction(
 
   if (!parsed.success) {
     const { fieldErrors } = parsed.error.flatten();
-    return {
+    return buildState({
       error: "Проверьте введённые данные",
-      fieldErrors,
+      fieldErrors: fieldErrors as RegisterFormState["fieldErrors"],
       values: {
         name: fields.name,
         email: fields.email,
         password: "",
       },
-    };
+    });
   }
 
   const apiUrl = getApiBaseUrl();
@@ -116,7 +140,7 @@ export async function registerAction(
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => null);
       const { error, fieldErrors } = mapErrors(errorPayload);
-      return {
+      return buildState({
         error,
         fieldErrors,
         values: {
@@ -124,7 +148,7 @@ export async function registerAction(
           email: parsed.data.email,
           password: "",
         },
-      };
+      });
     }
 
     const payload = await response.json().catch(() => null);
@@ -144,7 +168,7 @@ export async function registerAction(
     redirect("/login");
   } catch (error) {
     console.error("registerAction failed", error);
-    return {
+    return buildState({
       error: "Не удалось подключиться к сервису авторизации",
       fieldErrors: {},
       values: {
@@ -152,7 +176,7 @@ export async function registerAction(
         email: parsed.data.email,
         password: "",
       },
-    };
+    });
   }
 
   return {
