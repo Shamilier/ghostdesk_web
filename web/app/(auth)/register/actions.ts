@@ -5,41 +5,47 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
+import { getApiBaseUrl } from "@/lib/env";
 import { TOKEN_COOKIE_NAME } from "@/lib/session";
+
+type RegisterFormValues = {
+  name: string;
+  email: string;
+  password: string;
+};
 
 type RegisterFormState = {
   error: string | null;
-  fieldErrors: Record<string, string[]>;
-  values: {
-    name: string;
-    email: string;
-  };
+  fieldErrors: Partial<Record<keyof RegisterFormValues, string[]>>;
+  values: RegisterFormValues;
 };
+
+const EMPTY_VALUES: RegisterFormValues = {
+  name: "",
+  email: "",
+  password: "",
+};
+
+type BuildStateArgs = Partial<Omit<RegisterFormState, "values">> & {
+  values?: Partial<RegisterFormValues>;
+};
+
+function buildState(partial: BuildStateArgs = {}): RegisterFormState {
+  return {
+    error: partial.error ?? null,
+    fieldErrors: partial.fieldErrors ?? {},
+    values: {
+      ...EMPTY_VALUES,
+      ...(partial.values ?? {}),
+    },
+  };
+}
 
 const registerSchema = z.object({
   name: z.string().min(1, { message: "Имя обязательно" }).max(100),
   email: z.string().email({ message: "Введите корректный email" }),
   password: z.string().min(8, { message: "Минимальная длина пароля — 8 символов" }),
 });
-
-const INITIAL_REGISTER_STATE: RegisterFormState = {
-  error: null,
-  fieldErrors: {},
-  values: {
-    name: "",
-    email: "",
-  },
-};
-
-function getApiBaseUrl() {
-  const url = process.env.NEXT_PUBLIC_API_URL;
-
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured");
-  }
-
-  return url.replace(/\/$/, "");
-}
 
 function extractToken(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
@@ -66,7 +72,10 @@ function extractToken(payload: unknown): string | null {
 
 function mapErrors(payload: unknown) {
   if (!payload || typeof payload !== "object") {
-    return { error: "Не удалось зарегистрироваться", fieldErrors: {} as Record<string, string[]> };
+    return {
+      error: "Не удалось зарегистрироваться",
+      fieldErrors: {} as RegisterFormState["fieldErrors"],
+    };
   }
 
   const data = payload as {
@@ -76,7 +85,7 @@ function mapErrors(payload: unknown) {
   };
 
   const errorMessage = data.error ?? data.message ?? "Не удалось зарегистрироваться";
-  const fieldErrors = data.errors ?? {};
+  const fieldErrors = (data.errors ?? {}) as RegisterFormState["fieldErrors"];
 
   return { error: errorMessage, fieldErrors };
 }
@@ -84,8 +93,8 @@ function mapErrors(payload: unknown) {
 export async function registerAction(
   _prevState: RegisterFormState,
   formData: FormData,
-): Promise<RegisterFormState | void> {
-  const fields = {
+): Promise<RegisterFormState> {
+  const fields: RegisterFormValues = {
     name: String(formData.get("name") ?? ""),
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
@@ -95,17 +104,28 @@ export async function registerAction(
 
   if (!parsed.success) {
     const { fieldErrors } = parsed.error.flatten();
-    return {
+    return buildState({
       error: "Проверьте введённые данные",
-      fieldErrors,
+      fieldErrors: fieldErrors as RegisterFormState["fieldErrors"],
       values: {
         name: fields.name,
         email: fields.email,
       },
-    };
+    });
   }
 
   const apiUrl = getApiBaseUrl();
+
+  if (!apiUrl) {
+    return buildState({
+      error: "Сервис недоступен: не настроен API URL",
+      fieldErrors: {},
+      values: {
+        name: fields.name,
+        email: fields.email,
+      },
+    });
+  }
 
   try {
     const response = await fetch(`${apiUrl}/auth/register`, {
@@ -121,14 +141,14 @@ export async function registerAction(
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => null);
       const { error, fieldErrors } = mapErrors(errorPayload);
-      return {
+      return buildState({
         error,
         fieldErrors,
         values: {
           name: parsed.data.name,
           email: parsed.data.email,
         },
-      };
+      });
     }
 
     const payload = await response.json().catch(() => null);
@@ -148,18 +168,17 @@ export async function registerAction(
     redirect("/login");
   } catch (error) {
     console.error("registerAction failed", error);
-    return {
+    return buildState({
       error: "Не удалось подключиться к сервису авторизации",
       fieldErrors: {},
       values: {
         name: parsed.data.name,
         email: parsed.data.email,
       },
-    };
+    });
   }
 
-  return INITIAL_REGISTER_STATE;
+  return buildState({});
 }
 
-export { INITIAL_REGISTER_STATE };
 export type { RegisterFormState };

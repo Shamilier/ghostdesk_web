@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { SESSION_MAX_AGE_SECONDS } from "@/lib/auth";
+import { getApiBaseUrl } from "@/lib/env";
 import { TOKEN_COOKIE_NAME } from "@/lib/session";
 
 type LoginFormState = {
@@ -12,6 +13,7 @@ type LoginFormState = {
   fieldErrors: Partial<Record<"email" | "password", string[]>>;
   values: {
     email: string;
+    password: string;
   };
 };
 
@@ -19,24 +21,6 @@ const loginSchema = z.object({
   email: z.string().email({ message: "Введите корректный email" }),
   password: z.string().min(1, { message: "Пароль обязателен" }),
 });
-
-const INITIAL_LOGIN_STATE: LoginFormState = {
-  error: null,
-  fieldErrors: {},
-  values: {
-    email: "",
-  },
-};
-
-function getApiBaseUrl() {
-  const url = process.env.NEXT_PUBLIC_API_URL;
-
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured");
-  }
-
-  return url.replace(/\/$/, "");
-}
 
 function extractToken(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
@@ -86,7 +70,7 @@ function mapErrorMessage(payload: unknown, fallback: string) {
 export async function loginAction(
   _prevState: LoginFormState,
   formData: FormData,
-): Promise<LoginFormState | void> {
+): Promise<LoginFormState> {
   const fields = {
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
@@ -101,11 +85,23 @@ export async function loginAction(
       fieldErrors,
       values: {
         email: fields.email,
+        password: "",
       },
     };
   }
 
   const apiUrl = getApiBaseUrl();
+
+  if (!apiUrl) {
+    return {
+      error: "Сервис недоступен: не настроен API URL",
+      fieldErrors: {},
+      values: {
+        email: fields.email,
+        password: "",
+      },
+    };
+  }
 
   try {
     const response = await fetch(`${apiUrl}/auth/login`, {
@@ -125,6 +121,7 @@ export async function loginAction(
         fieldErrors: {},
         values: {
           email: parsed.data.email,
+          password: "",
         },
       };
     }
@@ -138,6 +135,7 @@ export async function loginAction(
         fieldErrors: {},
         values: {
           email: parsed.data.email,
+          password: "",
         },
       };
     }
@@ -158,12 +156,19 @@ export async function loginAction(
       fieldErrors: {},
       values: {
         email: parsed.data.email,
+        password: "",
       },
     };
   }
 
-  return INITIAL_LOGIN_STATE;
+  return {
+    error: null,
+    fieldErrors: {},
+    values: {
+      email: "",
+      password: "",
+    },
+  };
 }
 
-export { INITIAL_LOGIN_STATE };
 export type { LoginFormState };

@@ -1,12 +1,22 @@
 "use client";
 import Link from "next/link";
 import { useFormState } from "react-dom";
-import { loginAction, INITIAL_LOGIN_STATE, type LoginFormState } from "@/app/(auth)/login/actions";
+import { loginAction, type LoginFormState } from "@/app/(auth)/login/actions";
 import { FormSubmitButton } from "@/components/auth/form-submit-button";
 import { Input } from "@/components/ui/input";
 
+const INITIAL_LOGIN_STATE: LoginFormState = {
+  error: null,
+  fieldErrors: {},
+  values: {
+    email: "",
+    password: "",
+  },
+};
+
 export function LoginForm() {
   const [state, formAction] = useFormState<LoginFormState, FormData>(loginAction, INITIAL_LOGIN_STATE);
+  const emailErrors = state.fieldErrors?.email ?? [];
 
   return (
     <form action={formAction} className="space-y-6">
@@ -21,10 +31,10 @@ export function LoginForm() {
           placeholder="you@example.com"
           autoComplete="email"
           required
-          defaultValue={state.values.email}
+          defaultValue={state.values?.email ?? ""}
         />
-        {state.fieldErrors.email ? (
-          <p className="text-sm text-red-300">{state.fieldErrors.email.join(". ")}</p>
+        {emailErrors.length ? (
+          <p className="text-sm text-red-300">{emailErrors.join(". ")}</p>
         ) : null}
       </div>
       <div className="space-y-2">
@@ -39,7 +49,7 @@ export function LoginForm() {
           autoComplete="current-password"
           required
         />
-        {state.fieldErrors.password ? (
+        {state.fieldErrors?.password ? (
           <p className="text-sm text-red-300">{state.fieldErrors.password.join(". ")}</p>
         ) : null}
       </div>
