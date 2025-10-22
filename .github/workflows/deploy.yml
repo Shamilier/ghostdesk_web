@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          # <<< ВАЖНО: lock-файл лежит в web/
+          # lock-файл лежит в web/
           cache-dependency-path: web/package-lock.json
 
       - name: Install deps
@@ -45,31 +45,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web_artifact
-          # файл лежит внутри web/
           path: web/web_artifact.tgz
           if-no-files-found: error
-
-      - name: Get commit message
-        id: msg
-        # эта команда тоже выполнится из web/, это ок
-        run: |
-          MSG="${{ github.event.head_commit.message }}"
-          if [ -z "$MSG" ]; then
-            MSG="${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}"
-          fi
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo "$MSG" | tr '[:upper:]' '[:lower:]' >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Expose msg as artifact (for downstream job)
-        run: |
-          mkdir -p meta && printf '%s' "${{ steps.msg.outputs.message }}" > meta/commit_message.txt
-
-      - name: Upload meta
-        uses: actions/upload-artifact@v4
-        with:
-          name: web_meta
-          path: web/meta/commit_message.txt
 
   deploy:
     needs: [build]
@@ -79,25 +56,14 @@ jobs:
       PRISMA_SCHEMA: prisma/schema.prisma
       PM2_APP: ghostdesk-web
       PRISMA_VER: 6.17.1
+      NODE_ENV: production
+      PRISMA_HIDE_UPDATE_MESSAGE: 1
 
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: web_artifact
-
-      - name: Download meta
-        uses: actions/download-artifact@v4
-        with:
-          name: web_meta
-
-      - name: Read commit message
-        id: msg
-        run: |
-          COMMIT_MESSAGE="$(cat commit_message.txt || true)"
-          echo "message<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Copy artifact to VPS
         uses: appleboy/scp-action@v0.1.7
@@ -108,72 +74,53 @@ jobs:
           source: "web_artifact.tgz"
           target: "/home/web/ghostdesk_web/"
 
-      - name: Deploy via SSH
+      - name: Deploy via SSH (wipe + fresh push)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true
-          envs: APP_DIR,PRISMA_SCHEMA,PM2_APP,PRISMA_VER
+          envs: APP_DIR,PRISMA_SCHEMA,PM2_APP,PRISMA_VER,NODE_ENV,PRISMA_HIDE_UPDATE_MESSAGE
           script: |
             set -euo pipefail
 
-            COMMIT_MESSAGE='${{ steps.msg.outputs.message }}'
-            echo "Commit message: $COMMIT_MESSAGE"
-
-            echo "==> Prepare dirs"
+            echo "==> Prepare dir"
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            echo "==> Write .env (use secret or fallback to SQLite)"
-            DB_URL='${{ secrets.PROD_DATABASE_URL }}'
-            if [ -z "$DB_URL" ]; then
-              DB_URL='file:./prisma/dev.db'
-            fi
-            printf 'DATABASE_URL="%s"\n' "$DB_URL" > .env
-            cat .env
-
-
-            echo "==> Stop app (SQLite миграции делаем на остановленном процессе)"
+            echo "==> Stop app if running"
             pm2 stop "$PM2_APP" || true
+
+            echo "==> Clean release dir (keep .env if есть)"
+            find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name ".env" -exec rm -rf {} +
 
             echo "==> Unpack new release"
             tar -xzf ../web_artifact.tgz -C "$APP_DIR"
 
-            echo "==> Install deps (runtime)"
-            # если вдруг "next: command not found", поменяй на просто `npm ci`
-            nice -n 10 ionice -c2 -n7 npm ci --prefer-offline --no-audit
+            echo "==> Ensure .env"
+            DB_URL='${{ secrets.PROD_DATABASE_URL }}'
+            if [ -z "${DB_URL}" ]; then
+              DB_URL='file:./prisma/dev.db'
+            fi
+            printf 'DATABASE_URL="%s"\n' "$DB_URL" > .env
 
-            echo "==> Prisma generate"
+            echo "==> Install runtime deps"
+            npm ci --omit=dev --prefer-offline --no-audit
+
+            echo "==> Prisma client generate"
             npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
 
-            MODE="normal"
-            if echo "$COMMIT_MESSAGE" | grep -q "чистим-всё"; then
-              MODE="clean_all"
-            elif echo "$COMMIT_MESSAGE" | grep -q "чистим"; then
-              MODE="clean_data"
-            fi
-            echo "Deploy mode: $MODE"
+            echo "==> DROP & RECREATE schema (db push force-reset)"
+            npx --yes prisma@${PRISMA_VER} db push --schema="$PRISMA_SCHEMA" --force-reset
 
-            if [ "$MODE" = "clean_data" ]; then
-              echo "-> prisma migrate reset (drop & reapply)"
-              npx --yes prisma@${PRISMA_VER} migrate reset --schema="$PRISMA_SCHEMA" --force --skip-generate --skip-seed
-              npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
-            elif [ "$MODE" = "clean_all" ]; then
-              echo "-> wipe migrations + db, then init"
-              PRISMA_DIR="$(dirname "$PRISMA_SCHEMA")"
-              rm -rf "$PRISMA_DIR/migrations" "$PRISMA_DIR/dev.db" || true
-              npx --yes prisma@${PRISMA_VER} migrate dev --schema="$PRISMA_SCHEMA" --name init
-              npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
-            fi
+            # Если нужен сид — раскомментируй:
+            # echo "==> Seed"
+            # node prisma/seed.mjs || true
 
-            echo "==> prisma migrate deploy"
-            npx --yes prisma@${PRISMA_VER} migrate deploy --schema="$PRISMA_SCHEMA"
-
-            echo "==> Start/reload app"
+            echo "==> Start / Reload app via PM2"
             pm2 start npm --name "$PM2_APP" -- start -- --hostname 0.0.0.0 --port 3000 \
-              || pm2 reload "$PM2_APP"
+              || pm2 reload "$PM2_APP" --update-env
 
             pm2 save || true
-            echo "✅ Deployed $(date -Is) — mode=$MODE"
+            echo "✅ Fresh deploy done at $(date -Is)"
