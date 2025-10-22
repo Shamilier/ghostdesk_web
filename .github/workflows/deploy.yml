@@ -7,9 +7,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Все команды по умолчанию выполняем в каталоге web/
+    defaults:
+      run:
+        working-directory: web
+
     steps:
       - name: Checkout repo
-      # Чекаутим ровно тот коммит, который триггернул workflow
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -19,6 +23,8 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
+          # <<< ВАЖНО: lock-файл лежит в web/
+          cache-dependency-path: web/package-lock.json
 
       - name: Install deps
         run: npm ci
@@ -27,7 +33,6 @@ jobs:
         run: npm run build
 
       - name: Pack artifact
-        # Кладём ровно то, что нужно для рантайма
         run: |
           tar -czf web_artifact.tgz \
             .next \
@@ -40,11 +45,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web_artifact
-          path: web_artifact.tgz
+          # файл лежит внутри web/
+          path: web/web_artifact.tgz
           if-no-files-found: error
 
       - name: Get commit message
         id: msg
+        # эта команда тоже выполнится из web/, это ок
         run: |
           MSG="${{ github.event.head_commit.message }}"
           if [ -z "$MSG" ]; then
@@ -57,11 +64,12 @@ jobs:
       - name: Expose msg as artifact (for downstream job)
         run: |
           mkdir -p meta && printf '%s' "${{ steps.msg.outputs.message }}" > meta/commit_message.txt
+
       - name: Upload meta
         uses: actions/upload-artifact@v4
         with:
           name: web_meta
-          path: meta/commit_message.txt
+          path: web/meta/commit_message.txt
 
   deploy:
     needs: [build]
@@ -71,6 +79,7 @@ jobs:
       PRISMA_SCHEMA: prisma/schema.prisma
       PM2_APP: ghostdesk-web
       PRISMA_VER: 6.17.1
+
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -111,6 +120,7 @@ jobs:
             set -euo pipefail
 
             COMMIT_MESSAGE='${{ steps.msg.outputs.message }}'
+            echo "Commit message: $COMMIT_MESSAGE"
 
             echo "==> Prepare dirs"
             mkdir -p "$APP_DIR"
@@ -120,20 +130,19 @@ jobs:
             echo 'DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}' > .env
             grep DATABASE_URL .env
 
-            echo "==> Stop app (SQLite: лучше мигрировать на остановленном процессе)"
+            echo "==> Stop app (SQLite миграции делаем на остановленном процессе)"
             pm2 stop "$PM2_APP" || true
 
             echo "==> Unpack new release"
             tar -xzf ../web_artifact.tgz -C "$APP_DIR"
 
-            echo "==> Install runtime deps only"
-            # помягче к системе: меньше аудита и сети
-            nice -n 10 ionice -c2 -n7 npm ci --omit=dev --prefer-offline --no-audit
+            echo "==> Install deps (runtime)"
+            # если вдруг "next: command not found", поменяй на просто `npm ci`
+            nice -n 10 ionice -c2 -n7 npm ci --prefer-offline --no-audit
 
-            echo "==> Prisma generate for linux"
+            echo "==> Prisma generate"
             npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
 
-            echo "==> Commit-based mode"
             MODE="normal"
             if echo "$COMMIT_MESSAGE" | grep -q "чистим-всё"; then
               MODE="clean_all"
