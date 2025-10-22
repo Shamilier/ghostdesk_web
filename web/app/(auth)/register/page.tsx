@@ -8,6 +8,8 @@ export const metadata = {
   title: "Регистрация — GhostDesk",
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function RegisterPage() {
   const user = await getCurrentUser();
 
