@@ -16,8 +16,12 @@ type RegisterFormValues = {
 
 type RegisterFormState = {
   error: string | null;
-  fieldErrors: Partial<Record<keyof RegisterFormValues, string[]>>;
-  values: RegisterFormValues;
+  fieldErrors: Record<string, string[]>;
+  values: {
+    name: string;
+    email: string;
+    password: string;
+  };
 };
 
 type BuildStateArgs = Partial<Omit<RegisterFormState, "values">> & {
@@ -29,9 +33,8 @@ function buildState(partial: BuildStateArgs = {}): RegisterFormState {
     error: partial.error ?? null,
     fieldErrors: partial.fieldErrors ?? {},
     values: {
-      name: partial.values?.name ?? "",
-      email: partial.values?.email ?? "",
-      password: partial.values?.password ?? "",
+      ...EMPTY_VALUES,
+      ...(partial.values ?? {}),
     },
   };
 }
@@ -89,7 +92,7 @@ export async function registerAction(
   _prevState: RegisterFormState,
   formData: FormData,
 ): Promise<RegisterFormState> {
-  const fields: RegisterFormValues = {
+  const fields = {
     name: String(formData.get("name") ?? ""),
     email: String(formData.get("email") ?? ""),
     password: String(formData.get("password") ?? ""),
@@ -105,6 +108,7 @@ export async function registerAction(
       values: {
         name: fields.name,
         email: fields.email,
+        password: "",
       },
     });
   }
@@ -112,14 +116,14 @@ export async function registerAction(
   const apiUrl = getApiBaseUrl();
 
   if (!apiUrl) {
-    return buildState({
+    return {
       error: "Сервис недоступен: не настроен API URL",
       fieldErrors: {},
       values: {
         name: fields.name,
         email: fields.email,
       },
-    });
+    };
   }
 
   try {
@@ -142,6 +146,7 @@ export async function registerAction(
         values: {
           name: parsed.data.name,
           email: parsed.data.email,
+          password: "",
         },
       });
     }
@@ -169,11 +174,19 @@ export async function registerAction(
       values: {
         name: parsed.data.name,
         email: parsed.data.email,
+        password: "",
       },
     });
   }
 
-  return buildState({});
+  return {
+    error: null,
+    fieldErrors: {},
+    values: {
+      name: "",
+      email: "",
+    },
+  };
 }
 
 export type { RegisterFormState };

@@ -10,7 +10,6 @@ const INITIAL_LOGIN_STATE: LoginFormState = {
   fieldErrors: {},
   values: {
     email: "",
-    password: "",
   },
 };
 
