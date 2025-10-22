@@ -1,30 +1,52 @@
 name: Deploy Web to VPS
 
-
 on:
   push:
     branches: [ "codex2" ]
-  # если хочешь деплой после merge PR, а не каждого push:
-  # pull_request:
-  #   types: [closed]
-  #   branches: [ "main" ]
 
 jobs:
-  deploy:
-    # если включишь блок pull_request выше — эта строка деплоит только если PR смёржен
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout (нужно, чтобы достать текст коммита)
+      - name: Checkout repo
+      # Чекаутим ровно тот коммит, который триггернул workflow
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack artifact
+        # Кладём ровно то, что нужно для рантайма
+        run: |
+          tar -czf web_artifact.tgz \
+            .next \
+            public \
+            package.json package-lock.json \
+            prisma \
+            next.config.* || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web_artifact
+          path: web_artifact.tgz
+          if-no-files-found: error
 
       - name: Get commit message
         id: msg
         run: |
-          # для push
           MSG="${{ github.event.head_commit.message }}"
-          # для merge PR (если триггер pull_request/closed)
           if [ -z "$MSG" ]; then
             MSG="${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}"
           fi
@@ -32,30 +54,86 @@ jobs:
           echo "$MSG" | tr '[:upper:]' '[:lower:]' >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Deploy via SSH (build on server)
+      - name: Expose msg as artifact (for downstream job)
+        run: |
+          mkdir -p meta && printf '%s' "${{ steps.msg.outputs.message }}" > meta/commit_message.txt
+      - name: Upload meta
+        uses: actions/upload-artifact@v4
+        with:
+          name: web_meta
+          path: meta/commit_message.txt
+
+  deploy:
+    needs: [build]
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: /home/web/ghostdesk_web/web
+      PRISMA_SCHEMA: prisma/schema.prisma
+      PM2_APP: ghostdesk-web
+      PRISMA_VER: 6.17.1
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web_artifact
+
+      - name: Download meta
+        uses: actions/download-artifact@v4
+        with:
+          name: web_meta
+
+      - name: Read commit message
+        id: msg
+        run: |
+          COMMIT_MESSAGE="$(cat commit_message.txt || true)"
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Copy artifact to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "web_artifact.tgz"
+          target: "/home/web/ghostdesk_web/"
+
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true
-          envs: COMMIT_MESSAGE
+          envs: APP_DIR,PRISMA_SCHEMA,PM2_APP,PRISMA_VER
           script: |
             set -euo pipefail
 
             COMMIT_MESSAGE='${{ steps.msg.outputs.message }}'
-            APP_DIR="/home/web/ghostdesk_web/web"
 
-            echo "Commit message: $COMMIT_MESSAGE"
-
+            echo "==> Prepare dirs"
+            mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            # Обновляем код до origin/main
-            git fetch --all
-            git fetch origin --prune
+            echo "==> Write .env from secret"
+            echo 'DATABASE_URL=${{ secrets.PROD_DATABASE_URL }}' > .env
+            grep DATABASE_URL .env
 
+            echo "==> Stop app (SQLite: лучше мигрировать на остановленном процессе)"
+            pm2 stop "$PM2_APP" || true
 
-            # Определяем режим
+            echo "==> Unpack new release"
+            tar -xzf ../web_artifact.tgz -C "$APP_DIR"
+
+            echo "==> Install runtime deps only"
+            # помягче к системе: меньше аудита и сети
+            nice -n 10 ionice -c2 -n7 npm ci --omit=dev --prefer-offline --no-audit
+
+            echo "==> Prisma generate for linux"
+            npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
+
+            echo "==> Commit-based mode"
             MODE="normal"
             if echo "$COMMIT_MESSAGE" | grep -q "чистим-всё"; then
               MODE="clean_all"
@@ -64,25 +142,24 @@ jobs:
             fi
             echo "Deploy mode: $MODE"
 
-            # Зависимости и Prisma client
-            npm ci
-            npx prisma generate
-
-            # Очистка по режиму (SQLite)
             if [ "$MODE" = "clean_data" ]; then
-              echo "Reset DB (drop & reapply migrations)"
-              npx prisma migrate reset --force --skip-generate --skip-seed
+              echo "-> prisma migrate reset (drop & reapply)"
+              npx --yes prisma@${PRISMA_VER} migrate reset --schema="$PRISMA_SCHEMA" --force --skip-generate --skip-seed
+              npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
             elif [ "$MODE" = "clean_all" ]; then
-              echo "Wipe migrations + dev.db and create new init migration"
-              rm -rf prisma/migrations prisma/dev.db || true
-              npx prisma migrate dev --name init
+              echo "-> wipe migrations + db, then init"
+              PRISMA_DIR="$(dirname "$PRISMA_SCHEMA")"
+              rm -rf "$PRISMA_DIR/migrations" "$PRISMA_DIR/dev.db" || true
+              npx --yes prisma@${PRISMA_VER} migrate dev --schema="$PRISMA_SCHEMA" --name init
+              npx --yes prisma@${PRISMA_VER} generate --schema="$PRISMA_SCHEMA"
             fi
 
-            # Применяем миграции (на всякий случай)
-            npx prisma migrate deploy
+            echo "==> prisma migrate deploy"
+            npx --yes prisma@${PRISMA_VER} migrate deploy --schema="$PRISMA_SCHEMA"
 
-            # Сборка и zero-downtime рестарт
-            npm run build
-            pm2 reload ghostdesk-web || pm2 start npm --name ghostdesk-web -- start -- --hostname 0.0.0.0 --port 3000
+            echo "==> Start/reload app"
+            pm2 start npm --name "$PM2_APP" -- start -- --hostname 0.0.0.0 --port 3000 \
+              || pm2 reload "$PM2_APP"
 
-            echo "✅ Deployed ($(date -Is)) — mode=$MODE"
+            pm2 save || true
+            echo "✅ Deployed $(date -Is) — mode=$MODE"
