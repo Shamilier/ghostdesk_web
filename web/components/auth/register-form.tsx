@@ -16,7 +16,6 @@ const INITIAL_REGISTER_STATE: RegisterFormState = {
   values: {
     name: "",
     email: "",
-    password: "",
   },
 };
 
@@ -28,7 +27,7 @@ function getFieldErrors(fieldErrors: Record<string, string[]>, field: FieldName)
 export function RegisterForm() {
   const [state, formAction] = useFormState<RegisterFormState, FormData>(registerAction, INITIAL_REGISTER_STATE);
   const fieldErrors = state.fieldErrors as ErrorRecord;
-  const values = state.values ?? { name: "", email: "", password: "" };
+  const values = state.values ?? { name: "", email: "" };
 
   return (
     <form action={formAction} className="space-y-6">
