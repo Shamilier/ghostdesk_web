@@ -29,6 +29,15 @@ jobs:
       - name: Install deps
         run: npm ci
 
+      - name: Write .env.production for build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        run: |
+          cat > .env.production <<EOF
+          NODE_ENV=production
+          NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+          EOF
+
       - name: Build
         run: npm run build
 
@@ -132,6 +141,9 @@ jobs:
               DB_URL='file:./prisma/dev.db'
             fi
             printf 'DATABASE_URL="%s"\n' "$DB_URL" > .env
+            if [ -n "${{ secrets.NEXT_PUBLIC_API_URL }}" ]; then
+              printf 'NEXT_PUBLIC_API_URL="%s"\n' "${{ secrets.NEXT_PUBLIC_API_URL }}" >> .env
+            fi
             cat .env
 
 
@@ -173,7 +185,10 @@ jobs:
 
             echo "==> Start/reload app"
             pm2 start npm --name "$PM2_APP" -- start -- --hostname 0.0.0.0 --port 3000 \
-              || pm2 reload "$PM2_APP"
+              || pm2 reload "$PM2_APP" --update-env
+
+            grep -E 'NEXT_PUBLIC_API_URL|DATABASE_URL' .env || true
+            pm2 env "$PM2_APP" | grep -E 'NEXT_PUBLIC_API_URL|DATABASE_URL' || true
 
             pm2 save || true
             echo "✅ Deployed $(date -Is) — mode=$MODE"

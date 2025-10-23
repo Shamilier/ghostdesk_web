@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { getSession } from "@/lib/session";
+import { getApiBaseUrl } from "@/lib/env";
 
 type ApiUser = {
   id?: string | number;
@@ -27,16 +28,6 @@ export type AuthUser = {
 
 const DEFAULT_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
-function getApiBaseUrl() {
-  const url = process.env.NEXT_PUBLIC_API_URL;
-
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_API_URL is not configured");
-  }
-
-  return url.replace(/\/$/, "");
-}
-
 type FetchOptions = Omit<RequestInit, "headers"> & {
   headers?: Record<string, string>;
 };
@@ -49,6 +40,11 @@ async function fetchFromApi(path: string, options: FetchOptions = {}) {
   }
 
   const baseUrl = getApiBaseUrl();
+
+  if (!baseUrl) {
+    console.error("API base URL is not configured");
+    return null;
+  }
   const response = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: {
