@@ -1,0 +1,125 @@
+name: Deploy Web to VPS (Hard Reset)
+
+on:
+  push:
+    branches: [ "main" ]   # поменяй, если деплоишь с другой ветки
+  workflow_dispatch:        # возможность запустить руками
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Commit summary
+        run: |
+          echo "🔁 Ref: $GITHUB_REF"
+          echo "🔀 SHA: $GITHUB_SHA"
+          echo "📝 Message: ${{ github.event.head_commit.message }}"
+
+      - name: SSH deploy (inline, без серверных скриптов)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          # раскомментируй, если ключ с паролем:
+          # passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          # раскомментируй для проверки отпечатка host-key (рекомендуется):
+          # fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          script_stop: true
+          timeout: 30m
+          command_timeout: 30m
+          envs: BRANCH,PROJECT_DIR,PM2_NAME,HEALTH_URL,DB_PATH
+          script: |
+            # ---------- CONFIG (можно переопределять через "Actions → Variables") ----------
+            BRANCH="${BRANCH:-main}"
+            PROJECT_DIR="${PROJECT_DIR:-/home/web/ghostdesk_web}"
+            PM2_NAME="${PM2_NAME:-ghostdesk-web}"
+            DB_PATH="${DB_PATH:-$PROJECT_DIR/data/ghostdesk.db}"
+            HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/login}"
+
+            # ---------- Helpers & safety ----------
+            set -Eeuo pipefail
+            export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+            log() { echo -e "[$(date '+%F %T')] $*"; }
+            trap 'code=$?; log "❌ Deploy failed (exit $code)";
+                  log "— PM2 last logs:"; pm2 logs "'"$PM2_NAME"'" --lines 200 || true;
+                  log "— Nginx error.log tail:"; sudo tail -n 200 /var/log/nginx/error.log || true;
+                  exit $code' ERR
+
+            umask 027
+            mkdir -p "$PROJECT_DIR" "$PROJECT_DIR/data" "$PROJECT_DIR/backups"
+
+            log "=== 🚀 START Deploy → $PROJECT_DIR (branch: $BRANCH)"
+            cd "$PROJECT_DIR"
+
+            # ---------- Git hard reset ----------
+            log "🌐 Git fetch/reset -> origin/$BRANCH"
+            git fetch --all --prune
+            git checkout -f "$BRANCH" || true
+            git reset --hard "origin/$BRANCH"
+            git clean -fdx
+
+            # ---------- Установка зависимостей ----------
+            log "📦 npm ci --omit=dev"
+            npm ci --omit=dev
+
+            # ---------- Остановка старого PM2 ----------
+            if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+              log "🛑 pm2 delete $PM2_NAME"
+              pm2 delete "$PM2_NAME" || true
+            else
+              log "ℹ️ PM2 process $PM2_NAME not found — ok"
+            fi
+
+            # ---------- Бэкап и удаление SQLite (как просил) ----------
+            if [ -f "$DB_PATH" ]; then
+              ts=$(date '+%Y%m%d_%H%M%S')
+              cp "$DB_PATH" "$PROJECT_DIR/backups/ghostdesk_${ts}.db"
+              log "💾 DB backup -> $PROJECT_DIR/backups/ghostdesk_${ts}.db"
+              rm -f "$DB_PATH"
+              log "🧹 DB removed: $DB_PATH"
+            else
+              log "ℹ️ No DB file at $DB_PATH — skipping remove"
+            fi
+
+            # ---------- Подхват .env для PM2 ----------
+            if [ -f ".env" ]; then
+              log "🔐 Loading .env into env for PM2"
+              set -a; source ./.env; set +a
+            else
+              log "⚠️ .env not found at $PROJECT_DIR/.env — PM2 will run without extra env"
+            fi
+
+            # ---------- Старт PM2 ----------
+            log "▶️ pm2 start"
+            pm2 start src/server.js --name "$PM2_NAME" --update-env --time
+
+            log "💾 pm2 save"
+            pm2 save
+
+            # ---------- Health-check ----------
+            log "🩺 Health-check: $HEALTH_URL"
+            ok=0
+            for i in 1 2 3 4 5; do
+              code=$(curl -fsS -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+              log "   try #$i: HTTP $code"
+              if echo "$code" | grep -Eq '^(2|3)'; then ok=1; break; fi
+              sleep 2
+            done
+            [ "$ok" -eq 1 ] || { log "❌ Health-check failed"; exit 1; }
+
+            log "✅ Deploy finished successfully"
+
+      - name: Public check from runner (expect 200/302)
+        run: |
+          set -e
+          url="https://disciplaner.online/login"
+          code=$(curl -fsS -o /dev/null -w "%{http_code}" "$url" || echo "000")
+          echo "🌍 Public check $url → $code"
+          [[ "$code" =~ ^2|3 ]] || (echo "❌ Public check failed"; exit 1)
