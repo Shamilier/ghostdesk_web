@@ -11,28 +11,24 @@ const oauth = require('./oauth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'ghostai_super_secret';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'ghostdesk_super_secret';
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 32);
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '..', 'views'));
 
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "img-src": ["'self'", 'data:', 'https://images.unsplash.com'],
-        "script-src": ["'self'"],
-        "style-src": ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        "font-src": ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        "form-action": ["'self'", 'https://disciplaner.online', 'https://app.disciplaner.online'],
-        "navigate-to": ["'self'", 'ghostai:'],
-      },
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "img-src": ["'self'", 'data:', 'https://images.unsplash.com'],
+      "script-src": ["'self'"],
+      "style-src": ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      "font-src": ["'self'", 'https://fonts.gstatic.com', 'data:'],
     },
-    crossOriginEmbedderPolicy: false,
-  })
-);
+  },
+  crossOriginEmbedderPolicy: false,
+}));
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -62,13 +58,10 @@ app.use((req, res, next) => {
   if (typeof req.session.oauthRequest === 'undefined') {
     req.session.oauthRequest = null;
   }
-  if (typeof req.session.oauthReturnTo === 'undefined') {
-    req.session.oauthReturnTo = null;
-  }
   next();
 });
 
-const DEFAULT_CLIENT_ID = 'ghostai-desktop';
+const DEFAULT_CLIENT_ID = 'ghostdesk-desktop';
 
 const normalizeOAuthQuery = (query = {}) => {
   if (!query.client_id || !query.redirect_uri || !query.code_challenge) {
@@ -82,65 +75,6 @@ const normalizeOAuthQuery = (query = {}) => {
     codeChallenge: query.code_challenge,
     codeChallengeMethod: query.code_challenge_method || 'S256',
   };
-};
-
-const canonicalizeAuthorizePath = (value) => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('/oauth/authorize')) {
-    return null;
-  }
-
-  try {
-    const parsed = new URL(trimmed, 'http://localhost');
-    if (parsed.origin !== 'http://localhost') {
-      return null;
-    }
-
-    if (!parsed.pathname.startsWith('/oauth/authorize')) {
-      return null;
-    }
-
-    const normalizedSearch = parsed.search || '';
-    return `${parsed.pathname}${normalizedSearch}`;
-  } catch (err) {
-    return null;
-  }
-};
-
-const rememberAuthorizePath = (req, authorizePath) => {
-  const canonical = canonicalizeAuthorizePath(authorizePath);
-  if (canonical) {
-    req.session.oauthReturnTo = canonical;
-  } else {
-    req.session.oauthReturnTo = null;
-  }
-};
-
-const pickAuthorizePath = (candidateFromQuery, candidateFromSession) => {
-  const canonicalFromQuery = canonicalizeAuthorizePath(candidateFromQuery);
-  if (canonicalFromQuery) {
-    return canonicalFromQuery;
-  }
-
-  const canonicalFromSession = canonicalizeAuthorizePath(candidateFromSession);
-  if (canonicalFromSession) {
-    return canonicalFromSession;
-  }
-
-  return null;
-};
-
-const buildOAuthSuccessPayload = ({ redirectUri, code, state }) => {
-  const separator = redirectUri.includes('?') ? '&' : '?';
-  const redirectUrl = `${redirectUri}${separator}code=${encodeURIComponent(code)}${
-    state ? `&state=${encodeURIComponent(state)}` : ''
-  }`;
-
-  return { redirectUrl };
 };
 
 const finalizeOAuthIfNeeded = async (req, user) => {
@@ -166,17 +100,16 @@ const finalizeOAuthIfNeeded = async (req, user) => {
     });
 
     req.session.oauthRequest = null;
-    req.session.oauthReturnTo = null;
 
-    return buildOAuthSuccessPayload({
-      redirectUri: pending.redirectUri,
-      code,
-      state: pending.state,
-    });
+    const separator = pending.redirectUri.includes('?') ? '&' : '?';
+    const redirectUrl = `${pending.redirectUri}${separator}code=${encodeURIComponent(
+      code
+    )}${pending.state ? `&state=${encodeURIComponent(pending.state)}` : ''}`;
+
+    return redirectUrl;
   } catch (err) {
     console.error('Error creating authorization code', err);
     req.session.oauthRequest = null;
-    req.session.oauthReturnTo = null;
     throw err;
   }
 };
@@ -227,7 +160,7 @@ const formatAsIso8601 = (value) => {
 
 app.get('/', (req, res) => {
   res.render('index', {
-    title: 'Ghost AI Portal',
+    title: 'GhostDesk Portal',
     features: [
       'Мгновенное подключение к встречам и звонкам',
       'AI-подсказки и сценарии разговоров в реальном времени',
@@ -258,14 +191,7 @@ app.get('/register', (req, res) => {
     req.session.oauthRequest = oauthRequest;
   }
 
-  const oauthContinue = pickAuthorizePath(req.query.continue, req.session.oauthReturnTo);
-  if (oauthContinue) {
-    req.session.oauthReturnTo = oauthContinue;
-  } else {
-    req.session.oauthReturnTo = null;
-  }
-
-  res.render('register', { title: 'Регистрация', oauthRequest, oauthContinue });
+  res.render('register', { title: 'Регистрация', oauthRequest });
 });
 
 app.post('/register', async (req, res) => {
@@ -280,13 +206,6 @@ app.post('/register', async (req, res) => {
   });
   if (oauthFromBody) {
     req.session.oauthRequest = oauthFromBody;
-  }
-
-  const oauthContinue = pickAuthorizePath(req.body.continue, req.session.oauthReturnTo);
-  if (oauthContinue) {
-    req.session.oauthReturnTo = oauthContinue;
-  } else {
-    req.session.oauthReturnTo = null;
   }
 
   if (!email || !password || !confirmPassword) {
@@ -330,27 +249,12 @@ app.post('/register', async (req, res) => {
           }
 
           req.session.user = { id: this.lastID, email: email.toLowerCase(), token, plan: 'free', referral: referral || null };
-          req.session.flash = { type: 'success', message: 'Добро пожаловать в Ghost AI!' };
-
-          if (oauthContinue) {
-            req.session.oauthReturnTo = null;
-            return res.redirect(oauthContinue);
-          }
+          req.session.flash = { type: 'success', message: 'Добро пожаловать в GhostDesk!' };
 
           return finalizeOAuthIfNeeded(req, req.session.user)
-            .then((oauthSuccess) => {
-              if (oauthSuccess && oauthSuccess.redirectUrl) {
-                const statusMessage = req.session.flash ? req.session.flash.message : null;
-                if (req.session.flash) {
-                  req.session.flash = null;
-                }
-
-                return res.render('oauth-success', {
-                  title: 'Авторизация завершена',
-                  redirectUrl: oauthSuccess.redirectUrl,
-                  statusMessage: statusMessage || 'Ваш аккаунт создан. Переключаемся в приложение Ghost AI.',
-                  fallbackUrl: '/dashboard',
-                });
+            .then((redirectUrl) => {
+              if (redirectUrl) {
+                return res.redirect(redirectUrl);
               }
               return res.redirect('/dashboard');
             })
@@ -374,14 +278,7 @@ app.get('/login', (req, res) => {
     req.session.oauthRequest = oauthRequest;
   }
 
-  const oauthContinue = pickAuthorizePath(req.query.continue, req.session.oauthReturnTo);
-  if (oauthContinue) {
-    req.session.oauthReturnTo = oauthContinue;
-  } else {
-    req.session.oauthReturnTo = null;
-  }
-
-  res.render('login', { title: 'Вход', oauthRequest, oauthContinue });
+  res.render('login', { title: 'Вход', oauthRequest });
 });
 
 app.post('/login', (req, res) => {
@@ -396,13 +293,6 @@ app.post('/login', (req, res) => {
   });
   if (oauthFromBody) {
     req.session.oauthRequest = oauthFromBody;
-  }
-
-  const oauthContinue = pickAuthorizePath(req.body.continue, req.session.oauthReturnTo);
-  if (oauthContinue) {
-    req.session.oauthReturnTo = oauthContinue;
-  } else {
-    req.session.oauthReturnTo = null;
   }
 
   if (!email || !password) {
@@ -438,25 +328,10 @@ app.post('/login', (req, res) => {
     };
     req.session.flash = { type: 'success', message: 'С возвращением!' };
 
-    if (oauthContinue) {
-      req.session.oauthReturnTo = null;
-      return res.redirect(oauthContinue);
-    }
-
     return finalizeOAuthIfNeeded(req, req.session.user)
-      .then((oauthSuccess) => {
-        if (oauthSuccess && oauthSuccess.redirectUrl) {
-          const statusMessage = req.session.flash ? req.session.flash.message : null;
-          if (req.session.flash) {
-            req.session.flash = null;
-          }
-
-          return res.render('oauth-success', {
-            title: 'Авторизация завершена',
-            redirectUrl: oauthSuccess.redirectUrl,
-            statusMessage: statusMessage || 'С возвращением! Переключаемся в приложение Ghost AI.',
-            fallbackUrl: '/dashboard',
-          });
+      .then((redirectUrl) => {
+        if (redirectUrl) {
+          return res.redirect(redirectUrl);
         }
         return res.redirect('/dashboard');
       })
@@ -505,20 +380,13 @@ app.get('/oauth/authorize', async (req, res) => {
       codeChallengeMethod: 'S256',
     };
 
-    rememberAuthorizePath(req, req.originalUrl || null);
-
     const params = new URLSearchParams({
       client_id,
       redirect_uri,
       code_challenge,
-      code_challenge_method: 'S256',
     });
     if (state) {
       params.append('state', state);
-    }
-
-    if (req.session.oauthReturnTo) {
-      params.append('continue', req.session.oauthReturnTo);
     }
 
     return res.redirect(`/login?${params.toString()}`);
@@ -534,21 +402,11 @@ app.get('/oauth/authorize', async (req, res) => {
       state: state || null,
     });
 
-    req.session.oauthRequest = null;
-    req.session.oauthReturnTo = null;
-
-    const oauthSuccess = buildOAuthSuccessPayload({
-      redirectUri: redirect_uri,
-      code,
-      state: state || null,
-    });
-
-    return res.render('oauth-success', {
-      title: 'Авторизация завершена',
-      redirectUrl: oauthSuccess.redirectUrl,
-      statusMessage: 'Авторизация подтверждена. Переключаемся в приложение Ghost AI.',
-      fallbackUrl: '/dashboard',
-    });
+    const separator = redirect_uri.includes('?') ? '&' : '?';
+    const redirectLocation = `${redirect_uri}${separator}code=${encodeURIComponent(code)}${
+      state ? `&state=${encodeURIComponent(state)}` : ''
+    }`;
+    return res.redirect(redirectLocation);
   } catch (err) {
     console.error('Error issuing authorization code', err);
     return res.status(500).json({ error: 'server_error' });
@@ -687,5 +545,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Ghost AI portal is running on http://localhost:${PORT}`);
+  console.log(`GhostDesk portal is running on http://localhost:${PORT}`);
 });
