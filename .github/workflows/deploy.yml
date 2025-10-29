@@ -39,8 +39,8 @@ jobs:
             # ---------- CONFIG (можно переопределять через "Actions → Variables") ----------
             BRANCH="${BRANCH:-main}"
             PROJECT_DIR="${PROJECT_DIR:-/home/web/ghostdesk_web}"
-            PM2_NAME="${PM2_NAME:-ghostdesk-web}"
-            DB_PATH="${DB_PATH:-$PROJECT_DIR/data/ghostdesk.db}"
+            PM2_NAME="${PM2_NAME:-ghostai-web}"
+            DB_PATH="${DB_PATH:-$PROJECT_DIR/data/ghostai.db}"
             HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/login}"
 
             # ---------- Helpers & safety ----------
@@ -80,8 +80,8 @@ jobs:
             # ---------- Бэкап и удаление SQLite (как просил) ----------
             if [ -f "$DB_PATH" ]; then
               ts=$(date '+%Y%m%d_%H%M%S')
-              cp "$DB_PATH" "$PROJECT_DIR/backups/ghostdesk_${ts}.db"
-              log "💾 DB backup -> $PROJECT_DIR/backups/ghostdesk_${ts}.db"
+              cp "$DB_PATH" "$PROJECT_DIR/backups/ghostai_${ts}.db"
+              log "💾 DB backup -> $PROJECT_DIR/backups/ghostai_${ts}.db"
               rm -f "$DB_PATH"
               log "🧹 DB removed: $DB_PATH"
             else
@@ -119,7 +119,7 @@ jobs:
       - name: Public check from runner (expect 200/302)
         run: |
           set -e
-          url="https://disciplaner.online/login"
+          url="https://ghostai.ru/login"
           code=$(curl -fsS -o /dev/null -w "%{http_code}" "$url" || echo "000")
           echo "🌍 Public check $url → $code"
           [[ "$code" =~ ^2|3 ]] || (echo "❌ Public check failed"; exit 1)
