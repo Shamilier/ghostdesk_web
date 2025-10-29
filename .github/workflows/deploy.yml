@@ -6,6 +6,7 @@ on:
   workflow_dispatch:        # возможность запустить руками
 
 concurrency:
+
   group: prod-deploy
   cancel-in-progress: true
 
