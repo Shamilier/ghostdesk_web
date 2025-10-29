@@ -6,7 +6,7 @@
     <%- include('partials/header') %>
     <main class="page narrow">
       <section class="auth-card">
-        <h1>Создать аккаунт GhostDesk</h1>
+        <h1>Создать аккаунт Ghost AI</h1>
         <p class="auth-subtitle">Получите персональный токен и подключите ассистента за пару минут.</p>
         <%- include('partials/flash') %>
         <form action="/register" method="post" class="auth-form">
@@ -34,6 +34,10 @@
 
           <label for="referral">Реферальный код (необязательно)</label>
           <input type="text" id="referral" name="referral" placeholder="Например, TEAM2024" />
+
+          <% if (typeof oauthContinue !== 'undefined' && oauthContinue) { %>
+          <input type="hidden" name="continue" value="<%= oauthContinue %>" />
+          <% } %>
 
           <% if (typeof oauthRequest !== 'undefined' && oauthRequest) { %>
           <input type="hidden" name="client_id" value="<%= oauthRequest.clientId %>" />
