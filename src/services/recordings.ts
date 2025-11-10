@@ -2,6 +2,7 @@ const API_BASE_URL = process.env.GHOSTAI_API_BASE_URL || 'https://api.ghostai.ru
 
 export type TranscriptStatus = 'none' | 'queued' | 'processing' | 'ready' | 'failed';
 
+
 export type TranscriptResult = {
   status: TranscriptStatus;
   summary: string | null;
