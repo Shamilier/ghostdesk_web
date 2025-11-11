@@ -5,6 +5,7 @@ export type TranscriptStatus = 'none' | 'queued' | 'processing' | 'ready' | 'fai
 
 export type TranscriptResult = {
   status: TranscriptStatus;
+  
   summary: string | null;
   transcript: string | null;
   error: string | null;
