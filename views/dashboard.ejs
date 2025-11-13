@@ -18,7 +18,7 @@
       <section class="dashboard-grid">
         <article class="stat-card">
           <h3>Тариф</h3>
-          <p class="stat-value"><%= user.plan %></p>
+          <p class="stat-value"><%= planLabel || (user.plan ? user.plan : '—') %></p>
           <p class="stat-description">Обновите тариф, чтобы получить доступ к расширенной аналитике и API.</p>
           <button class="primary-button" type="button" data-open-billing>Оплатить подписку</button>
         </article>
@@ -59,6 +59,7 @@
             <span class="billing-modal__cycle-note" data-annual-note>2 месяца бесплатно при годовой оплате</span>
           </div>
         </header>
+        <p class="billing-modal__feedback" data-billing-feedback hidden></p>
         <div class="billing-modal__plans">
           <article class="plan-card" data-plan-card data-plan="free" data-monthly-price="Free" data-annual-price="Free">
             <div class="plan-card__header">
@@ -89,7 +90,7 @@
               <li>Интеллект-заметки, сводки и фоллоу-апы</li>
             </ul>
             <p class="plan-card__footnote">Токены не переносятся. PAYG-докупка доступна всегда.</p>
-            <button class="primary-button plan-card__cta" type="button">Оформить Plus</button>
+            <button class="primary-button plan-card__cta" type="button" data-plan-action="plus">Оформить Plus</button>
           </article>
           <article class="plan-card plan-card--lux" data-plan-card data-plan="pro" data-monthly-price="4 999 ₽ / месяц" data-annual-price="49 990 ₽ / год (2 мес. бесплатно)">
             <div class="plan-card__badge plan-card__badge--outline">Pro — Unlimited</div>
@@ -103,7 +104,7 @@
               <li>Fair-use лимит: 10 000 токенов в месяц</li>
               <li>Всё из Plus: транскрибация, пост-анализ, RT-подсказки</li>
             </ul>
-            <button class="ghost-button plan-card__cta" type="button">Оформить Pro</button>
+            <button class="ghost-button plan-card__cta" type="button" data-plan-action="pro">Оформить Pro</button>
           </article>
         </div>
       </div>
