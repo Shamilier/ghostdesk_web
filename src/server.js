@@ -164,8 +164,9 @@ const createYookassaPayment = async ({ planId, cycle, userId, returnUrl }) => {
   }
 
   const idempotenceKey = crypto.randomUUID();
+
   const body = {
-    amount: pricing.amount,
+    amount: pricing.amount, // { value: '...', currency: 'RUB' } — как у тебя в getPlanPricing
     capture: true,
     confirmation: {
       type: 'redirect',
@@ -191,14 +192,25 @@ const createYookassaPayment = async ({ planId, cycle, userId, returnUrl }) => {
 
   if (!response.ok) {
     const errorBody = await response.text();
+
+    console.error(
+      '[YooKassa] Failed to create payment',
+      {
+        status: response.status,
+        body: errorBody,
+        requestBody: body,
+      }
+    );
+
     const error = new Error('Failed to create YooKassa payment');
     error.status = response.status;
     error.details = errorBody;
     throw error;
   }
 
-  return response.json();
+  return await response.json();
 };
+
 
 const fetchYookassaPayment = async (paymentId) => {
   const response = await fetch(`${YOOKASSA_API_BASE}/payments/${paymentId}`, {
@@ -735,17 +747,12 @@ const requireAuth = (req, res, next) => {
 };
 
 app.post('/api/billing/checkout', requireAuth, async (req, res) => {
-  req.session.lastYookassaPayment = {
-  id: payment.id,
-  plan: String(plan),
-  cycle: normalizedCycle,
-  createdAt: Date.now(),
-};
+  // 1. Проверяем, вообще настроен ли биллинг
   if (!isBillingConfigured()) {
     return res.status(503).json({ error: 'billing_not_configured' });
-    
   }
 
+  // 2. Достаём план и цикл из тела запроса
   const { plan, cycle } = req.body || {};
   const normalizedCycle = cycle === 'annual' ? 'annual' : 'monthly';
 
@@ -753,10 +760,14 @@ app.post('/api/billing/checkout', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'invalid_plan_selection' });
   }
 
-  const baseUrl = BILLING_RETURN_BASE_URL ? BILLING_RETURN_BASE_URL.replace(/\/$/, '') : `${req.protocol}://${req.get('host')}`;
+  // 3. Формируем returnUrl
+  const baseUrl = BILLING_RETURN_BASE_URL
+    ? BILLING_RETURN_BASE_URL.replace(/\/$/, '')
+    : `${req.protocol}://${req.get('host')}`;
   const returnUrl = `${baseUrl}/billing/return`;
 
   try {
+    // 4. Создаём платёж в YooKassa
     const payment = await createYookassaPayment({
       planId: plan,
       cycle: normalizedCycle,
@@ -770,15 +781,29 @@ app.post('/api/billing/checkout', requireAuth, async (req, res) => {
       return res.status(502).json({ error: 'missing_confirmation_url' });
     }
 
+    // 5. Сохраняем последний платеж в сессию — пригодится в /billing/return
+    req.session.lastYookassaPayment = {
+      id: payment.id,
+      plan: String(plan),
+      cycle: normalizedCycle,
+      createdAt: Date.now(),
+    };
+
+    // 6. Отдаём фронту URL для редиректа
     return res.json({
       confirmationUrl,
       paymentId: payment.id,
     });
   } catch (err) {
-    console.error('Failed to create YooKassa payment', err);
+    console.error('Failed to create YooKassa payment', {
+      message: err.message,
+      status: err.status,
+      details: err.details,
+    });
     return res.status(502).json({ error: 'payment_creation_failed' });
   }
 });
+
 
 app.get('/billing/return', requireAuth, async (req, res) => {
   // 1. Проверяем, вообще настроен ли биллинг
