@@ -747,7 +747,7 @@ app.post('/api/billing/checkout', requireAuth, async (req, res) => {
   }
 
   const baseUrl = BILLING_RETURN_BASE_URL ? BILLING_RETURN_BASE_URL.replace(/\/$/, '') : `${req.protocol}://${req.get('host')}`;
-  const returnUrl = `${baseUrl}/billing/return`;
+  const returnUrl = `${baseUrl}`;
 
   try {
     const payment = await createYookassaPayment({
