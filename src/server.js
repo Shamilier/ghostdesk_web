@@ -1,7 +1,7 @@
 require('ts-node/register/transpile-only');
 
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '..', '.env.local') });
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
@@ -226,17 +226,43 @@ app.use(
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
-        "img-src": ["'self'", 'data:', 'https://images.unsplash.com'],
+        "img-src": [
+          "'self'",
+          "data:",
+          "https://images.unsplash.com",
+        ],
         "script-src": ["'self'"],
-        "style-src": ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        "font-src": ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        "form-action": ["'self'", 'https://disciplaner.online', 'https://app.disciplaner.online'],
-        "navigate-to": ["'self'", 'ghostai:'],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+        ],
+        "font-src": [
+          "'self'",
+          "https://fonts.gstatic.com",
+          "data:",
+        ],
+        "form-action": [
+          "'self'",
+          "https://disciplaner.online",
+          "https://app.disciplaner.online",
+          "https://yookassa.ru",
+          "https://yoomoney.ru",
+          "https://checkout.yookassa.ru",
+        ],
+        "navigate-to": [
+          "'self'",
+          "ghostai:",
+          "https://yookassa.ru",
+          "https://yoomoney.ru",
+          "https://checkout.yookassa.ru",
+        ],
       },
     },
     crossOriginEmbedderPolicy: false,
   })
 );
+
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
