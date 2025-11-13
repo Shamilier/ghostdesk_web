@@ -2286,7 +2286,6 @@ body.landing-body::after {
 .billing-modal__dialog {
   position: relative;
   width: min(1000px, 100%);
-  max-height: min(88vh, 700px);
   overflow-y: auto;
   background: rgba(19, 19, 30, 0.94);
   border: 1px solid rgba(160, 106, 255, 0.4);
