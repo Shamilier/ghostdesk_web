@@ -735,8 +735,15 @@ const requireAuth = (req, res, next) => {
 };
 
 app.post('/api/billing/checkout', requireAuth, async (req, res) => {
+  req.session.lastYookassaPayment = {
+  id: payment.id,
+  plan: String(plan),
+  cycle: normalizedCycle,
+  createdAt: Date.now(),
+};
   if (!isBillingConfigured()) {
     return res.status(503).json({ error: 'billing_not_configured' });
+    
   }
 
   const { plan, cycle } = req.body || {};
@@ -774,6 +781,7 @@ app.post('/api/billing/checkout', requireAuth, async (req, res) => {
 });
 
 app.get('/billing/return', requireAuth, async (req, res) => {
+  // 1. Проверяем, вообще настроен ли биллинг
   if (!isBillingConfigured()) {
     req.session.flash = {
       type: 'error',
@@ -782,7 +790,16 @@ app.get('/billing/return', requireAuth, async (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  const paymentId = req.query.payment_id || req.query.paymentId;
+  // 2. Пытаемся достать paymentId:
+  //    сначала из query (payment_id/paymentId),
+  //    потом из сессии (куда мы его положили при создании платежа)
+  let paymentId = req.query.payment_id || req.query.paymentId;
+  const lastPayment = req.session.lastYookassaPayment;
+
+  if (!paymentId && lastPayment && lastPayment.id) {
+    paymentId = lastPayment.id;
+  }
+
   if (!paymentId) {
     req.session.flash = {
       type: 'error',
@@ -793,6 +810,7 @@ app.get('/billing/return', requireAuth, async (req, res) => {
 
   try {
     const payment = await fetchYookassaPayment(paymentId);
+
     if (!payment || payment.status !== 'succeeded') {
       req.session.flash = {
         type: 'error',
@@ -817,10 +835,14 @@ app.get('/billing/return', requireAuth, async (req, res) => {
     const planValue = buildPlanValue(planId, cycle);
     await persistUserPlan(userId, planValue);
 
+    // Обновляем сессию и locals, чтобы на /dashboard сразу был новый план
     req.session.user.plan = planValue;
     req.session.userPlanRefreshedAt = Date.now();
     res.locals.currentUser = req.session.user;
     res.locals.currentUserPlanLabel = getPlanLabel(planValue);
+
+    // Можно почистить сохранённый платеж — он больше не нужен
+    req.session.lastYookassaPayment = null;
 
     req.session.flash = {
       type: 'success',
@@ -830,6 +852,7 @@ app.get('/billing/return', requireAuth, async (req, res) => {
     return res.redirect('/dashboard');
   } catch (err) {
     console.error('Failed to finalize YooKassa payment', err);
+
     req.session.flash = {
       type: 'error',
       message: 'Не удалось подтвердить оплату. Свяжитесь с поддержкой.',
@@ -837,6 +860,7 @@ app.get('/billing/return', requireAuth, async (req, res) => {
     return res.redirect('/dashboard');
   }
 });
+
 
 app.post('/webhooks/yookassa', async (req, res) => {
   if (!isBillingConfigured()) {
