@@ -2362,6 +2362,23 @@ body.landing-body::after {
   transition: opacity 0.2s ease;
 }
 
+.billing-modal__feedback {
+  margin: -4px 0 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 91, 135, 0.35);
+  background: rgba(255, 91, 135, 0.12);
+  color: var(--danger);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.billing-modal__feedback.is-success {
+  border-color: rgba(57, 217, 138, 0.35);
+  background: rgba(57, 217, 138, 0.12);
+  color: var(--success);
+}
+
 .billing-cycle-toggle {
   display: inline-flex;
   background: rgba(160, 106, 255, 0.12);
@@ -2506,6 +2523,32 @@ body.landing-body::after {
 .plan-card__cta {
   margin-top: auto;
   width: 100%;
+}
+
+.plan-card__cta[data-loading] {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.plan-card__cta[data-loading]::after {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(247, 247, 251, 0.75);
+  border-top-color: transparent;
+  animation: billing-spin 0.8s linear infinite;
+}
+
+@keyframes billing-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {
