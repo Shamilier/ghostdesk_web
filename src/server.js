@@ -1795,40 +1795,27 @@ app.post('/internal/users/:id/tokens/debit', async (req, res) => {
 // const db = require('./db');
 
 app.get('/oauth/profile', async (req, res) => {
-  const auth = req.headers.authorization || '';
+  const authHeader = req.headers.authorization || '';
 
-  // Ветка для внутренних ключей вида Bearer web-user-<user_token>
-  if (auth.startsWith('Bearer web-user-')) {
-    const apiToken = auth.replace('Bearer web-user-', '').trim();
-    if (!apiToken) {
+  // Ветка для внутренних web-user-* токенов
+  if (authHeader.startsWith('Bearer web-user-')) {
+    const userId = authHeader.replace('Bearer web-user-', '').trim();
+
+    if (!userId) {
       return res.status(400).json({ error: 'invalid_token' });
     }
 
-    try {
-      const user = await db('users')
-        .where({ token: apiToken })
-        .first();
-
-      if (!user) {
-        return res.status(401).json({ error: 'invalid_token' });
-      }
-
-      return res.json({
-        id: String(user.id),           // <-- ВАЖНО: числовой id из БД
-        email: user.email,
-        plan: user.plan,
-        referral: user.referral,
-        created_at: user.created_at || null,
-        token: user.token,             // api-ключ, если нужен клиенту
-      });
-    } catch (err) {
-      console.error('OAuth profile (web-user) error', err);
-      return res.status(500).json({ error: 'server_error' });
-    }
+    return res.json({
+      id: String(userId),
+      email: null,
+      plan: 'free',
+      referral: null,
+      created_at: new Date().toISOString(),
+    });
   }
 
-  // Обычная ветка OAuth access_token
-  const tokenMatch = auth.match(/^Bearer\s+(\S+)$/i);
+  // Дальше оставь как было у тебя:
+  const tokenMatch = authHeader.match(/^Bearer\s+(\S+)$/i);
 
   if (!tokenMatch) {
     res.set('WWW-Authenticate', 'Bearer error="invalid_token"');
@@ -1857,6 +1844,7 @@ app.get('/oauth/profile', async (req, res) => {
     return res.status(500).json({ error: 'server_error' });
   }
 });
+
 
 
 app.get('/api/recordings', async (req, res) => {
