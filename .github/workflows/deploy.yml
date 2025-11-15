@@ -66,6 +66,15 @@ jobs:
             git reset --hard "origin/$BRANCH"
             git clean -fdx
 
+            # ---------- Создаём .env заново ----------
+
+            log "🧾 Writing .env"
+            cat > .env << 'EOF'
+            YOOKASSA_SHOP_ID=1205952
+            YOOKASSA_API_KEY="test_9R4kY1MXYg9nW7hxqgJbEpzrCii8tPH2aBE-7tJYpxw"
+            BILLING_RETURN_BASE_URL=https://ghostai.ru
+            INTERNAL_API_SECRET="ghostdesk1"
+
             # ---------- Установка зависимостей ----------
             log "📦 npm ci --omit=dev"
             npm ci --omit=dev
