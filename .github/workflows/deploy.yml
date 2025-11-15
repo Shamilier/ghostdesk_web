@@ -74,6 +74,7 @@ jobs:
             YOOKASSA_API_KEY="test_9R4kY1MXYg9nW7hxqgJbEpzrCii8tPH2aBE-7tJYpxw"
             BILLING_RETURN_BASE_URL=https://ghostai.ru
             INTERNAL_API_SECRET="ghostdesk1"
+            EOF
 
             # ---------- Установка зависимостей ----------
             log "📦 npm ci --omit=dev"
